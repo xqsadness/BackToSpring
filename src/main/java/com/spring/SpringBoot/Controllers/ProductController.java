@@ -5,7 +5,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.spring.SpringBoot.Models.Product;
 import com.spring.SpringBoot.Models.ResponseObject;
-import com.spring.SpringBoot.Repositories.ProductRepository;
+import com.spring.SpringBoot.Service.ProductService;
 
 import java.util.List;
 import java.util.Optional;
@@ -25,68 +25,60 @@ import org.springframework.web.bind.annotation.PutMapping;
 public class ProductController {
 
     @Autowired
-    private ProductRepository repository;
+    private ProductService productService;
+
+    private ResponseEntity<ResponseObject> responseEntity(HttpStatus httpStatus, String status, String message,
+            Object data) {
+        return ResponseEntity.status(httpStatus).body(new ResponseObject(status, message, data));
+    }
 
     @GetMapping("")
     public List<Product> getAllProduct() {
-        return repository.findAll();
+        return productService.getAllProducts();
     }
 
     // get product by id
     @GetMapping("/{id}")
-    ResponseEntity<ResponseObject> finByID(@PathVariable Long id) {
-        Optional<Product> product = repository.findById(id);
+    ResponseEntity<ResponseObject> findByID(@PathVariable Long id) {
+        Optional<Product> product = productService.findById(id);
 
-        return product.isPresent() ? ResponseEntity.status(HttpStatus.OK).body(
-                new ResponseObject("ok", "Query Success", product))
-                : ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                        new ResponseObject("failed", "Cannot find product with id " + id, product));
+        return product.isPresent() ? responseEntity(HttpStatus.OK, "ok", "Query Success", product)
+                : responseEntity(HttpStatus.NOT_FOUND, "failed", "Cannot find product with id " + id, product);
     }
 
     // insert product with post method
     @PostMapping("/insert")
     public ResponseEntity<ResponseObject> insertProdEntity(@RequestBody Product product) {
-        List<Product> foundProducts = repository.findByProductName(product.getProductName().trim());
+        List<Product> foundProducts = productService.findByProductName(product.getProductName());
 
         if (foundProducts.size() > 0) {
-            return ResponseEntity.status(HttpStatus.OK).body(
-                    new ResponseObject("failed", "Product name already taken", ""));
+            return responseEntity(HttpStatus.OK, "failed", "Product name already taken", "");
         }
-        return ResponseEntity.status(HttpStatus.OK).body(
-                new ResponseObject("ok", "Insert product success", repository.save(product)));
+        return responseEntity(HttpStatus.OK, "ok", "Insert product success",
+                productService.insertProducts(product));
     }
 
     // update, upsert = update if found, otherwise insert
     @PutMapping("/{id}")
     public ResponseEntity<ResponseObject> updateProdEntity(@PathVariable Long id, @RequestBody Product newProduct) {
-        Product updateProdEntity = repository.findById(id)
-                .map(product -> {
-                    product.setProductName(newProduct.getProductName());
-                    product.setProductYear(newProduct.getProductYear());
-                    product.setUrlString(newProduct.getUrlString());
-                    product.setPrice(newProduct.getPrice());
+        List<Product> foundProducts = productService.findByProductName(newProduct.getProductName());
 
-                    return repository.save(product);
-                }).orElseGet(() -> {
-                    newProduct.setId(id);
-                    return repository.save(newProduct);
-                });
-
-        return ResponseEntity.status(HttpStatus.OK).body(
-                new ResponseObject("ok", "Update product success ", updateProdEntity));
+        if (foundProducts.size() > 0) {
+            return responseEntity(HttpStatus.OK, "failed", "Product name already taken", "");
+        } else {
+            Product updateProdEntity = productService.updateProduct(id, newProduct);
+            return responseEntity(HttpStatus.OK, "ok", "Update product success", updateProdEntity);
+        }
     }
 
     // delete a product
     @DeleteMapping("/{id}")
     ResponseEntity<ResponseObject> deleteProdEntity(@PathVariable Long id) {
-        boolean exists = repository.existsById(id);
+        boolean exists = productService.deleteProduct(id);
 
         if (exists) {
-            repository.deleteById(id);
-            return ResponseEntity.status(HttpStatus.OK).body(
-                    new ResponseObject("ok", "Delete product success ", ""));
+            return responseEntity(HttpStatus.OK, "ok", "Delete product " + id + " success", "");
         }
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
-                new ResponseObject("failed", "Cannot find product to delete, id " + id, ""));
+        return responseEntity(HttpStatus.NOT_FOUND, "failed", "Cannot find product to delete, id " + id, "");
     }
 }
